@@ -6,7 +6,8 @@ pipeline {
   stages {
     stage('Checkout') {
       steps {
-        checkout scm
+        //checkout scm
+        git branch: 'main', url: 'https://github.com/pablovillazon/springboot-app.git'
       }
     }
     stage('Build & Test') {
