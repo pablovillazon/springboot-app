@@ -1,0 +1,105 @@
+pipeline {
+  agent any
+  environment {
+    IMAGE_NAME = "demo-ci-cd:latest"
+    REPORT_DIR = "security-reports"
+    ALLOWED_HIGH_SCA = 3
+  }
+  stages {
+    stage('Checkout') {
+      steps {
+        //checkout scm
+        git branch: 'main', url: 'https://github.com/pablovillazon/springboot-app.git'
+        sh 'echo "Checkout del repositorio completado..."'
+      }
+    }
+    stage('Build'){
+        steps{
+            sh 'mvn clean package -DskipTests'
+        }
+    }
+    stage('Test') {
+      steps {
+          script{
+              def testResult = sh(
+                  script: 'mvn test',
+                  returnStatus: true
+              )
+              
+              junit '**/target/surefire-reports/*.xml'
+              
+              if (testResult != 0) {
+                  error("MVN Build & Test failed...")
+              } else {
+                  echo "All unit tests & Build passed successfully..."
+              }
+          }
+          //sh 'mvn clean install'
+         }
+    }
+    stage('SAST Scan - Semgrep') {
+            steps {
+                script {
+                    def result = sh(
+                        script: "semgrep --config=auto --json --output $REPORT_DIR/semgrep.json .",
+                        returnStatus: true
+                    )
+
+                    if (result != 0) {
+                        error("🚨 SAST vulnerabilities detected")
+                    }
+                }
+            }
+    }
+    
+    stage('SCA Scan - Dependency Check') {
+            steps {
+                script {
+                    sh """
+                    mvn org.owasp:dependency-check-maven:check \
+                    -Dformat=JSON \
+                    -DoutputDirectory=$REPORT_DIR
+                    """
+                    sh ""
+                    def highVulns = sh(
+                        script: "cat target/dependency-check-report.json | grep '\"severity\" : \"HIGH\"' | wc -l",
+                        returnStdout: true
+                    ).trim()
+
+                    if (highVulns.toInteger() > $ALLOWED_HIGH_SCA) {
+                        error("🚨 SCA - Scan: HIGH vulnerabilities found in dependencies")
+                    }
+                }
+            }
+        }
+    stage('Build Docker Image') {
+      steps {
+        //sh 'docker build -t $IMAGE_NAME .'
+        sh 'echo "Building docker image..."'
+      }
+    }
+    stage('Run Container') {
+      steps {
+        //sh 'docker rm -f demo-ci-cd || true'
+        //sh 'docker run -d --name demo-ci-cd -p 8080:8080 $IMAGE_NAME'
+        sh 'echo "deploying docker container.."'
+      }
+    }
+  }
+  post {
+    always {
+      //junit '**/target/surefire-reports/*.xml'
+      archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+    }
+    success {
+            echo "✅ Pipeline completed successfully"
+    }
+    failure {
+            echo "❌ Pipeline stopped due to security policy"
+            
+            //mail to: 'security-team@demo.com',
+            //subject: "DevSecOps Pipeline Failed",
+            //body: "Security gate failed in Jenkins pipeline"
+    }
+  }
+}
