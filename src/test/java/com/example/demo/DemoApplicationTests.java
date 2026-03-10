@@ -22,7 +22,7 @@ class DemoApplicationTests {
     void healthCheckShouldReturnUp() {
         ResponseEntity<String> response = restTemplate.getForEntity("/actuator/health", String.class);
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(response.getBody()).contains("\"status\":\"UP2\"");
+        assertThat(response.getBody()).contains("\"status\":\"UP\"");
     }
 
 }
